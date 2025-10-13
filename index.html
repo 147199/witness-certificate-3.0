@@ -318,6 +318,16 @@
             font-size: 14px;
             color: #666;
         }
+
+        .wechat-download-tips {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 15px;
+            font-size: 14px;
+            color: #856404;
+        }
     </style>
 </head>
 <body>
@@ -393,10 +403,7 @@
                 <button id="returnFromWechat" class="btn" style="margin-top: 20px;">
                     🎉 我已完成评论，生成证书
                 </button>
-
-                <button id="directGenerate" class="btn btn-secondary" style="margin-top: 10px;">
-                    ⚡ 直接生成证书（跳过评论）
-                </button>
+                <!-- 已删除"直接生成证书"按钮 -->
             </div>
         </div>
         
@@ -418,6 +425,14 @@
                 <p>🎊 证书生成成功！</p>
                 <p style="font-size: 14px; margin-top: 5px; opacity: 0.8;">请保存证书图片留念</p>
             </div>
+
+            <!-- 微信下载提示 -->
+            <div class="wechat-download-tips" id="wechatTips" style="display: none;">
+                <p><strong>📱 微信下载提示：</strong></p>
+                <p>1. 点击"保存证书图片"按钮</p>
+                <p>2. 长按生成的证书图片</p>
+                <p>3. 选择"保存到手机"即可下载</p>
+            </div>
             
             <div class="action-buttons">
                 <button id="downloadBtn" class="btn download-btn">💾 保存证书图片</button>
@@ -431,6 +446,7 @@
         // 存储用户信息
         let userInfo = {};
         let preloadedImage = null;
+        let isWeChat = /MicroMessenger/i.test(navigator.userAgent);
 
         // 预加载证书模板图片
         function preloadCertificateImage() {
@@ -450,6 +466,11 @@
                 const blessing = this.value || '祝福语将显示在这里...';
                 document.getElementById('blessingPreview').textContent = blessing;
             });
+
+            // 如果是微信浏览器，显示下载提示
+            if (isWeChat) {
+                document.getElementById('wechatTips').style.display = 'block';
+            }
         });
 
         // 第一步：信息提交
@@ -492,12 +513,6 @@
         // 从微信返回生成证书
         document.getElementById('returnFromWechat').addEventListener('click', function() {
             userInfo.wechatComment = true;
-            generateCertificate();
-        });
-
-        // 直接生成证书（跳过评论）
-        document.getElementById('directGenerate').addEventListener('click', function() {
-            userInfo.wechatComment = false;
             generateCertificate();
         });
         
@@ -550,7 +565,7 @@
             document.getElementById('loadingMessage').innerHTML = '<p>❌ 图片加载失败，请检查网络连接</p>';
         }
         
-        // 下载证书功能 - 优化版本（快速生成）
+        // 下载证书功能 - 微信兼容版本
         document.getElementById('downloadBtn').addEventListener('click', function() {
             const certificateContainer = document.getElementById('certificateForDownload');
             
@@ -561,9 +576,9 @@
                 <p style="font-size: 16px; margin-top: 10px;">正在生成高清证书图片...</p>
             `;
             
-            // 使用html2canvas将证书转换为图片 - 优化配置（快速生成）
+            // 使用html2canvas将证书转换为图片
             html2canvas(certificateContainer, {
-                scale: 1.5, // 降低分辨率提高速度
+                scale: isWeChat ? 1.2 : 1.5, // 微信中降低分辨率提高成功率
                 useCORS: true,
                 allowTaint: true,
                 logging: false,
@@ -581,30 +596,115 @@
                     const link = document.createElement('a');
                     link.download = `见证者证书-${userInfo.name}.png`;
                     link.href = canvas.toDataURL('image/png');
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
                     
-                    // 显示成功提示
-                    setTimeout(() => {
-                        alert('证书下载成功！');
-                    }, 100);
+                    if (isWeChat) {
+                        // 微信环境中，创建图片显示供用户长按保存
+                        handleWeChatDownload(canvas);
+                    } else {
+                        // 普通浏览器环境，直接下载
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        setTimeout(() => {
+                            alert('证书下载成功！');
+                        }, 100);
+                    }
                     
                 } catch (error) {
                     console.error('下载失败:', error);
-                    alert('下载失败，请长按证书截图保存');
+                    // 微信环境下的备选方案
+                    if (isWeChat) {
+                        alert('请长按证书图片，选择"保存到手机"进行下载');
+                    } else {
+                        alert('下载失败，请长按证书截图保存');
+                    }
                 }
                 
             }).catch(error => {
                 console.error('证书生成失败:', error);
                 document.getElementById('loadingMessage').style.display = 'none';
-                alert('生成失败，请尝试截图保存证书');
+                if (isWeChat) {
+                    alert('生成失败，请长按证书区域截图保存');
+                } else {
+                    alert('生成失败，请尝试截图保存证书');
+                }
             });
         });
+
+        // 微信环境下载处理
+        function handleWeChatDownload(canvas) {
+            // 创建图片显示区域
+            const imageContainer = document.createElement('div');
+            imageContainer.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.8);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+            `;
+            
+            const image = new Image();
+            image.src = canvas.toDataURL('image/png');
+            image.style.cssText = `
+                max-width: 90%;
+                max-height: 70%;
+                border-radius: 10px;
+                box-shadow: 0 0 20px rgba(255,255,255,0.3);
+            `;
+            
+            const tips = document.createElement('div');
+            tips.style.cssText = `
+                color: white;
+                text-align: center;
+                margin-top: 20px;
+                font-size: 16px;
+                padding: 0 20px;
+            `;
+            tips.innerHTML = `
+                <p><strong>📱 下载指引</strong></p>
+                <p>1. 长按上方图片</p>
+                <p>2. 选择"保存到手机"</p>
+                <p>3. 图片将保存到您的相册</p>
+            `;
+            
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = '关闭';
+            closeBtn.style.cssText = `
+                margin-top: 20px;
+                padding: 10px 30px;
+                background: #8B0000;
+                color: white;
+                border: none;
+                border-radius: 20px;
+                font-size: 16px;
+                cursor: pointer;
+            `;
+            closeBtn.onclick = function() {
+                document.body.removeChild(imageContainer);
+            };
+            
+            imageContainer.appendChild(image);
+            imageContainer.appendChild(tips);
+            imageContainer.appendChild(closeBtn);
+            document.body.appendChild(imageContainer);
+            
+            // 提示用户
+            alert('请长按弹出的证书图片，选择"保存到手机"进行下载');
+        }
         
         // 分享证书功能
         document.getElementById('shareBtn').addEventListener('click', function() {
-            alert('请使用"保存证书图片"功能下载后，在微信中分享图片');
+            if (isWeChat) {
+                alert('请先使用"保存证书图片"功能下载证书，然后在微信中分享图片');
+            } else {
+                alert('请使用"保存证书图片"功能下载后分享');
+            }
         });
         
         // 重新生成新证书
